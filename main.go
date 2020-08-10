@@ -50,8 +50,32 @@ var repos = []Repo{
 }
 
 // ==== EDGES ====
-var edges_repo_user = make(map[*Repo][]*User)
-var edges_user_repo = make(map[*User][]*Repo)
+type Contribution struct {
+    Repo *Repo
+    Total int
+    First int
+    Last int
+}
+
+var edges_repo_user = make(map[string][]*User)
+var edges_user_repo = make(map[string][]*Repo)
+var edges_user_contribution = make(map[string][]*Contribution)
+
+func extract_contribution_interval(weeks *[]Week) (int, int) {
+        var first, last int
+        for _, week := range *weeks {
+            cond := week.A + week.C + week.D
+            if cond != 0 {
+                if first == 0 {
+                    first = week.W
+                } else if last == 0 {
+                    last = week.W
+                    return first, last
+                }
+            }
+        }
+        return first, last
+}
 
 
 func fetch_contributors(repo *Repo) {
@@ -72,9 +96,13 @@ func fetch_contributors(repo *Repo) {
         return
     }
     for _, res := range result {
+        total := res.Total
+        first, last := extract_contribution_interval(&res.Weeks)
         user := User{res.Author["login"].(string), res.Author["url"].(string)}
-        edges_repo_user[repo] = append(edges_repo_user[repo], &user)
-        edges_user_repo[&user] = append(edges_user_repo[&user], repo)
+        contribution := Contribution{repo, total, first, last}
+        edges_repo_user[repo.String()] = append(edges_repo_user[repo.String()], &user)
+        edges_user_repo[(&user).String()] = append(edges_user_repo[(&user).String()], repo)
+        edges_user_contribution[(&user).String()] = append(edges_user_contribution[(&user).String()], &contribution)
     }
     defer resp.Body.Close()
 }
@@ -88,16 +116,15 @@ func main() {
     for _, repo :=  range repos{
         fetch_contributors(&repo)
     }
-    // for k, v := range edges_user_repo {
-    //     log.Println(fmt.Sprintf("%i", len(v)))
-    //     if len(v) >= 2 {
-    //         log.Println(fmt.Sprintf("%s", k))
-    //     }
-    // }
-    //p_edges_user_repo, err := json.MarshalIndent(edges_user_repo, "", " ")
-    //if err != nil {
-    //    log.Fatal(err)
-    //}
-    log.Println(fmt.Sprintf("%s", pedges_user_repo))
+    for k, v := range edges_user_repo {
+        if len(v) >= 2 {
+            log.Println(fmt.Sprintf("%s", k))
+        }
+    }
+    p_edges_user_repo, err := json.MarshalIndent(edges_user_contribution, "", " ")
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Println(fmt.Sprintf("%s", p_edges_user_repo))
     log.Fatal(http.ListenAndServe(":8001", nil))
 }
