@@ -6,8 +6,11 @@ import (
     "log"
     "net/http"
     "fmt"
+    "encoding/binary"
     "encoding/json"
 //    "github.com/google/jsonapi"
+    "crypto/md5"
+    //"gonum.org/v1/gonum/graph"
 )
 
 type Week struct {
@@ -37,6 +40,17 @@ type User struct {
     Login string
     Url string
 }
+func (u *User) ID() int64 {
+    sum := md5.Sum([]byte(u.Login))
+    num, _ := binary.Varint(sum[:])
+    return num
+}
+
+func (r *Repo) ID() int64 {
+    sum := md5.Sum([]byte(r.String()))
+    num, _ := binary.Varint(sum[:])
+    return num
+}
 
 func (u *User) String() string {
     return fmt.Sprintf("%s", u.Login)
@@ -44,14 +58,18 @@ func (u *User) String() string {
 
 var repos = []Repo{
     Repo{"ethereum","go-ethereum"},
-    Repo{"ethereum","viper"},
     Repo{"smartcontractkit", "chainlink"},
     Repo{"blockchainsllc", "DAO"},
+    Repo{"paritytech", "polkadot"},
+    Repo{"cosmos", "cosmos"},
+    Repo{"neo-project", "neo"},
+    Repo{"icon-project", "loopchain"},
+    //Repo{"icon-project", "loopchain"},
 }
 
 // ==== EDGES ====
 type Contribution struct {
-    Repo *Repo
+    Repo Repo
     Total int
     First int
     Last int
@@ -99,32 +117,36 @@ func fetch_contributors(repo *Repo) {
         total := res.Total
         first, last := extract_contribution_interval(&res.Weeks)
         user := User{res.Author["login"].(string), res.Author["url"].(string)}
-        contribution := Contribution{repo, total, first, last}
+        contr := Contribution{*repo, total, first, last}
         edges_repo_user[repo.String()] = append(edges_repo_user[repo.String()], &user)
         edges_user_repo[(&user).String()] = append(edges_user_repo[(&user).String()], repo)
-        edges_user_contribution[(&user).String()] = append(edges_user_contribution[(&user).String()], &contribution)
+        edges_user_contribution[(&user).String()] = append(edges_user_contribution[(&user).String()], &contr)
     }
     defer resp.Body.Close()
 }
 
 func main() {
-    helloHandler := func(w http.ResponseWriter, req *http.Request) {
-        io.WriteString(w, "Blockkraken!\n")
-    }
-    http.HandleFunc("/blockkraken", helloHandler)
     log.Println("Listing for request at 8001")
     for _, repo :=  range repos{
         fetch_contributors(&repo)
     }
-    for k, v := range edges_user_repo {
+    for k, v := range edges_user_contribution {
         if len(v) >= 2 {
-            log.Println(fmt.Sprintf("%s", k))
-        }
+            p, err := json.MarshalIndent(v, "", " ")
+            if err != nil {
+                log.Fatal(err)
+            }
+            log.Println(fmt.Sprintf("%s : %s", k, p))
+       }
     }
     p_edges_user_repo, err := json.MarshalIndent(edges_user_contribution, "", " ")
     if err != nil {
         log.Fatal(err)
     }
-    log.Println(fmt.Sprintf("%s", p_edges_user_repo))
+    //log.Println(fmt.Sprintf("%s", p_edges_user_repo))
+    helloHandler := func(w http.ResponseWriter, req *http.Request) {
+        io.WriteString(w, fmt.Sprintf("Blockkraken! %s\n", p_edges_user_repo))
+    }
+    http.HandleFunc("/blockkraken", helloHandler)
     log.Fatal(http.ListenAndServe(":8001", nil))
 }
