@@ -10,7 +10,7 @@ import (
     "encoding/json"
 //    "github.com/google/jsonapi"
     "crypto/md5"
-    //"gonum.org/v1/gonum/graph"
+    "gonum.org/v1/gonum/graph"
 )
 
 type Week struct {
@@ -55,6 +55,89 @@ func (r *Repo) ID() int64 {
 func (u *User) String() string {
     return fmt.Sprintf("%s", u.Login)
 }
+
+// ==== NEW GRAPH ==== 
+type CGraph struct {
+    CNodes map[int64]graph.Node
+    CEdges map[int64]NodeIds
+}
+
+type CEdges struct {
+    from graph.Node
+    to graph.Node
+}
+
+type NodeIds []int64
+
+func (nodes NodeIds) Len() int {
+    return len(nodes)
+}
+
+func (nodes NodeIds) Next() int64 {
+    n := 0
+    return func() int64 {
+        n += 1
+        return n
+    }
+}
+
+func (g *CGraph) Edge(uid, vid int64) graph.Edge {
+    // u ->  v node 
+    u_node := g.CNodes[uid]
+    neighbor_nodes := g.CEdges[uid]
+    for _, node_id := range neighbor_nodes{
+        if node_id == vid {
+            v_node := g.CNodes[vid]
+            return CEdge{
+               u_node,
+               v_node,
+            }
+        }
+    }
+    return nil
+}
+
+func NewCGraph() *CGraph{
+    nodes := make(map[int64]Node)
+    edges := make(map[int64]NodeIds)
+    return &CGraph{
+        nodes,
+        edges,
+    }
+}
+
+func (g *CGraph) Node(id int64) graph.Node {
+    return g.CNodes[id]
+}
+
+
+func (g *CGraph) Nodes(id int64) graph.Nodes {
+    var nodes []Node
+    for _, v := range g.CNodes {
+       nodes = append(nodes, v)
+    }
+    return nodes
+}
+
+func (g *CGraph) From(id int64) graph.Nodes {
+   return g.CEdges[id]
+}
+
+func (g *CGraph) HasEdgeBetween(xid, yid int64) bool {
+    neighbor_nodes := g.CEdges[xid]
+    for _, k :=  range neighbor_nodes {
+        if k == yid {
+            return true
+        }
+    }
+    return false
+}
+
+
+// ==== END GRAPH ====
+
+
+
 
 var repos = []Repo{
     Repo{"ethereum","go-ethereum"},
