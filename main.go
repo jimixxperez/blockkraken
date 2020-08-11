@@ -49,22 +49,21 @@ type User struct {
 }
 
 func NewUser(login string, url string) *User {
-    sum := md5.Sum([]byte(u.Login))
+    sum := md5.Sum([]byte(login))
     num, _ := binary.Varint(sum[:])
     edges := new([]int64)
     return &User{
-        num
-        edges
-        login
-        url
+        CNode{num, *edges},
+        login,
+        url,
     }
 }
 
-func NewRepo(owner string, name string) *User {
+func NewRepo(owner string, name string) *Repo {
     repo := new(Repo)
-    repo.Owner = Owner
+    repo.Owner = owner
     repo.Name = name
-    repo.Edges = new([]int64)
+    repo.Edge = *new([]int64)
     sum := md5.Sum([]byte(repo.String()))
     num, _ := binary.Varint(sum[:])
     repo.Id = num
@@ -82,9 +81,15 @@ func (u *User) String() string {
     return fmt.Sprintf("%s", u.Login)
 }
 
+type CNodes struct{
+    Curr int
+    Nodes []graph.Node
+}
+
+
 // ==== NEW GRAPH ==== 
 type CGraph struct {
-    Nodes map[int64]graph.Node
+    CNodes map[int64]graph.Node
 }
 
 type CEdges struct {
@@ -92,25 +97,29 @@ type CEdges struct {
     to graph.Node
 }
 
-type NodeIds []int64
-type NodeList []Node
-
-func (nodes NodeList) Len() int {
-    return len(nodes)
+func (n *CNodes) Len() int {
+    return len(n.Nodes)
 }
 
-func (nodes NodeList) Next() int64 {
-    n := 0
-    return func() Node {
-        n += 1
-        return nodes[n-1]
+func (n *CNodes) Next() bool {
+    if n.Len() >= n.Curr + 1 {
+        return false
     }
+    return true
+}
+
+func (n *CNodes) Node() graph.Node {
+    return n.Nodes[n.Curr]
+}
+
+func (n *CNodes) Reset() {
+    n.Curr = 0
 }
 
 func (g *CGraph) Edge(uid, vid int64) graph.Edge {
     // u ->  v node 
     u_node := g.CNodes[uid]
-    neighbor_nodes := g.CEdges[uid]
+    neighbor_nodes := (u_node.(CNode)).Edge
     for _, node_id := range neighbor_nodes{
         if node_id == vid {
             v_node := g.CNodes[vid]
@@ -124,11 +133,9 @@ func (g *CGraph) Edge(uid, vid int64) graph.Edge {
 }
 
 func NewCGraph() *CGraph{
-    nodes := make(map[int64]Node)
-    edges := make(map[int64]NodeIds)
+    nodes := make(map[int64]graph.Node)
     return &CGraph{
         nodes,
-        edges,
     }
 }
 
@@ -138,15 +145,20 @@ func (g *CGraph) Node(id int64) graph.Node {
 
 
 func (g *CGraph) Nodes(id int64) graph.Nodes {
-    var nodes []Node
+    n := new(CNodes)
     for _, v := range g.CNodes {
-       nodes = append(nodes, v)
+       n.Nodes = append(n.Nodes, v)
     }
-    return nodes
+    return n
 }
 
 func (g *CGraph) From(id int64) graph.Nodes {
-   return g.CEdges[id]
+    node_ids := g.CNodes[id]
+    n := new(CNodes)
+    for _, node_id := range node_ids {
+        n.Nodes = append(n.Nodes, g.CNodes[node_id])
+    }
+    return n
 }
 
 func (g *CGraph) HasEdgeBetween(xid, yid int64) bool {
@@ -165,16 +177,16 @@ func (g *CGraph) HasEdgeBetween(xid, yid int64) bool {
 
 
 
-var repos = []Repo{
-    Repo{"ethereum","go-ethereum"},
-    Repo{"smartcontractkit", "chainlink"},
-    Repo{"blockchainsllc", "DAO"},
-    Repo{"paritytech", "polkadot"},
-    Repo{"cosmos", "cosmos"},
-    Repo{"neo-project", "neo"},
-    Repo{"icon-project", "loopchain"},
-    //Repo{"icon-project", "loopchain"},
-}
+//var repos = new([]Repo)
+var repos = []Repo{NewRepo("ethereum", "go-ethereum")}
+//repos = append(repos, NewRepo("ethereum","go-ethereum"))
+//repos = append(repos, NewRepo("smartcontractkit", "chainlink"))
+//repos = append(repos, NewRepo("blockchainsllc", "DAO"))
+//repos = append(repos, NewRepo("paritytech", "polkadot"))
+//repos = append(repos, NewRepo("cosmos", "cosmos"))
+//repos = append(repos, NewRepo("neo-project", "neo"))
+//repos = append(repos, NewRepo("icon-project", "loopchain"))
+//repos =    //Repo{"icon-project", "loopchain"},
 
 // ==== EDGES ====
 type Contribution struct {
