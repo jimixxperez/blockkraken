@@ -27,7 +27,13 @@ type Contributor struct {
     Author map[string]interface{}
 }
 
+type CNode struct {
+    Id int64
+    Edge []int64
+}
+
 type Repo struct {
+    CNode
     Owner string
     Name string
 }
@@ -37,19 +43,39 @@ func (r *Repo) String() string {
 }
 
 type User struct {
+    CNode
     Login string
     Url string
 }
-func (u *User) ID() int64 {
+
+func NewUser(login string, url string) *User {
     sum := md5.Sum([]byte(u.Login))
     num, _ := binary.Varint(sum[:])
-    return num
+    edges := new([]int64)
+    return &User{
+        num
+        edges
+        login
+        url
+    }
+}
+
+func NewRepo(owner string, name string) *User {
+    repo := new(Repo)
+    repo.Owner = Owner
+    repo.Name = name
+    repo.Edges = new([]int64)
+    sum := md5.Sum([]byte(repo.String()))
+    num, _ := binary.Varint(sum[:])
+    repo.Id = num
+    return repo
+}
+func (u *User) ID() int64 {
+    return u.Id
 }
 
 func (r *Repo) ID() int64 {
-    sum := md5.Sum([]byte(r.String()))
-    num, _ := binary.Varint(sum[:])
-    return num
+    return r.Id
 }
 
 func (u *User) String() string {
@@ -58,8 +84,7 @@ func (u *User) String() string {
 
 // ==== NEW GRAPH ==== 
 type CGraph struct {
-    CNodes map[int64]graph.Node
-    CEdges map[int64]NodeIds
+    Nodes map[int64]graph.Node
 }
 
 type CEdges struct {
@@ -68,16 +93,17 @@ type CEdges struct {
 }
 
 type NodeIds []int64
+type NodeList []Node
 
-func (nodes NodeIds) Len() int {
+func (nodes NodeList) Len() int {
     return len(nodes)
 }
 
-func (nodes NodeIds) Next() int64 {
+func (nodes NodeList) Next() int64 {
     n := 0
-    return func() int64 {
+    return func() Node {
         n += 1
-        return n
+        return nodes[n-1]
     }
 }
 
