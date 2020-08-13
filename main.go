@@ -32,6 +32,10 @@ type CNode struct {
     Edge []int64
 }
 
+func (n CNode) ID() int64 {
+   return n.Id 
+}
+
 type Repo struct {
     CNode
     Owner string
@@ -69,6 +73,19 @@ func NewRepo(owner string, name string) *Repo {
     repo.Id = num
     return repo
 }
+
+
+func NewContribution(xi, total string, first int, last int) *Repo {
+    repo := new(Repo)
+    repo.Owner = owner
+    repo.Name = name
+    repo.Edge = *new([]int64)
+    sum := md5.Sum([]byte(repo.String()))
+    num, _ := binary.Varint(sum[:])
+    repo.Id = num
+    return repo
+}
+
 func (u *User) ID() int64 {
     return u.Id
 }
@@ -92,9 +109,24 @@ type CGraph struct {
     CNodes map[int64]graph.Node
 }
 
-type CEdges struct {
+type CEdge struct {
     from graph.Node
     to graph.Node
+}
+
+func (e CEdge) From() graph.Node {
+    return e.from
+}
+
+func (e CEdge) To() graph.Node {
+    return e.to
+}
+
+func (e CEdge) ReversedEdge() graph.Edge {
+    return CEdge{
+        e.to,
+        e.from,
+    }
 }
 
 func (n *CNodes) Len() int {
@@ -114,6 +146,11 @@ func (n *CNodes) Node() graph.Node {
 
 func (n *CNodes) Reset() {
     n.Curr = 0
+}
+
+func (g *CGraph) AddNode(n graph.Node) {
+    id := n.ID()
+    g.CNodes[id] = n
 }
 
 func (g *CGraph) Edge(uid, vid int64) graph.Edge {
@@ -153,7 +190,7 @@ func (g *CGraph) Nodes(id int64) graph.Nodes {
 }
 
 func (g *CGraph) From(id int64) graph.Nodes {
-    node_ids := g.CNodes[id]
+    node_ids := g.CNodes[id].(CNode).Edge
     n := new(CNodes)
     for _, node_id := range node_ids {
         n.Nodes = append(n.Nodes, g.CNodes[node_id])
@@ -162,7 +199,7 @@ func (g *CGraph) From(id int64) graph.Nodes {
 }
 
 func (g *CGraph) HasEdgeBetween(xid, yid int64) bool {
-    neighbor_nodes := g.CEdges[xid]
+    neighbor_nodes := g.CNodes[xid].(CNode).Edge
     for _, k :=  range neighbor_nodes {
         if k == yid {
             return true
@@ -178,7 +215,7 @@ func (g *CGraph) HasEdgeBetween(xid, yid int64) bool {
 
 
 //var repos = new([]Repo)
-var repos = []Repo{NewRepo("ethereum", "go-ethereum")}
+var repos = []Repo{*NewRepo("ethereum", "go-ethereum")}
 //repos = append(repos, NewRepo("ethereum","go-ethereum"))
 //repos = append(repos, NewRepo("smartcontractkit", "chainlink"))
 //repos = append(repos, NewRepo("blockchainsllc", "DAO"))
@@ -190,7 +227,7 @@ var repos = []Repo{NewRepo("ethereum", "go-ethereum")}
 
 // ==== EDGES ====
 type Contribution struct {
-    Repo Repo
+    CEdge
     Total int
     First int
     Last int
@@ -237,10 +274,10 @@ func fetch_contributors(repo *Repo) {
     for _, res := range result {
         total := res.Total
         first, last := extract_contribution_interval(&res.Weeks)
-        user := User{res.Author["login"].(string), res.Author["url"].(string)}
-        contr := Contribution{*repo, total, first, last}
+        user := NewUser(res.Author["login"].(string), res.Author["url"].(string))
+        contr := NewContribution(*repo, total, first, last)
         edges_repo_user[repo.String()] = append(edges_repo_user[repo.String()], &user)
-        edges_user_repo[(&user).String()] = append(edges_user_repo[(&user).String()], repo)
+        edges_user_repo[(user).String()] = append(edges_user_repo[(user).String()], repo)
         edges_user_contribution[(&user).String()] = append(edges_user_contribution[(&user).String()], &contr)
     }
     defer resp.Body.Close()
