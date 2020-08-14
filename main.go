@@ -1,17 +1,18 @@
 package main
 
 import (
-    "io"
+    _ "io"
     "io/ioutil"
     "log"
     "net/http"
     "fmt"
     "encoding/binary"
     "encoding/json"
+    "html/template"
 //    "github.com/google/jsonapi"
     "crypto/md5"
     "gonum.org/v1/gonum/graph"
-    "gonum.org/v1/gonum/graph/encoding/dot"
+    _ "gonum.org/v1/gonum/graph/encoding/dot"
 )
 
 type Week struct {
@@ -30,7 +31,7 @@ type Contributor struct {
 
 type CNode struct {
     Id int64 `json:"id"`
-    Name string
+    Name string `json:"label"`
     Type string `json:"type"`
     Attributes map[string]interface{}
 }
@@ -71,14 +72,18 @@ func NewRepo(owner string, name string) graph.Node {
 }
 
 
-func NewContribution(from_node graph.Node, to_node graph.Node , total int, first int, last int) graph.Edge {
+func NewContribution(source_node graph.Node, target_node graph.Node , total int, first int, last int) graph.Edge {
     attrs := make(map[string]interface{})
     attrs["total"] = total
     attrs["first"] = first
     attrs["last"] = last
+    name := fmt.Sprintf("%s_%s", source_node, target_node)
+    sum := md5.Sum([]byte(name))
+    num, _ := binary.Varint(sum[:])
     return CEdge{
-        from_node,
-        to_node,
+        num,
+        source_node,
+        target_node,
         attrs,
     }
 }
@@ -91,21 +96,21 @@ type CNodes struct{
 
 // ==== NEW GRAPH ==== 
 type CGraph struct {
-    CNodes map[int64]graph.Node `json:"nodes"`
-    CEdges map[int64][]graph.Edge `json:"edges"`
+    CNodes CGraphNodes `json:"nodes"`
+    CEdges CGraphEdges `json:"edges"`
 }
 
 func (c CEdge) From() graph.Node {
-    return c.from
+    return c.Source
 }
 
 func (c CEdge) To() graph.Node {
-    return c.to
+    return c.Target
 }
 
 func (c CEdge) ReversedEdge() graph.Edge {
-    c.to = c.from
-    c.from = c.to
+    c.Target = c.Source
+    c.Source = c.Target
     return c
 }
 
@@ -152,9 +157,12 @@ func (g *CGraph) Edge(uid, vid int64) graph.Edge {
     return nil
 }
 
+type CGraphNodes map[int64]graph.Node
+type CGraphEdges map[int64][]graph.Edge
+
 func NewCGraph() *CGraph{
-    nodes := make(map[int64]graph.Node)
-    edges := make(map[int64][]graph.Edge)
+    nodes := make(CGraphNodes)
+    edges := make(CGraphEdges)
     return &CGraph{
         nodes,
         edges,
@@ -172,6 +180,24 @@ func (g *CGraph) Nodes() graph.Nodes {
        n.Nodes = append(n.Nodes, v)
     }
     return n
+}
+
+func (n CGraphNodes) MarshalJSON() ([]byte, error) {
+    nodes := *new([]graph.Node)
+    for _, v := range n {
+        nodes = append(nodes, v)
+    }
+    return json.Marshal(nodes)
+}
+
+func (e CGraphEdges) MarshalJSON() ([]byte, error) {
+    edges := *new([]CEdge)
+    for _, v := range e {
+        for _, edge := range v {
+            edges = append(edges, edge.(CEdge))
+        }
+    }
+    return json.Marshal(edges)
 }
 
 func (g *CGraph) From(id int64) graph.Nodes {
@@ -219,10 +245,31 @@ var repos = []graph.Node{
 //repos =    //Repo{"icon-project", "loopchain"},
 
 // ==== EDGES ====
+//
+// 
 type CEdge struct {
-    from graph.Node `json:"from"`
-    to graph.Node `json:"to"`
-    attributes map[string]interface{}
+    Id int64 `json:"id"`
+    Source graph.Node `json:"source"`
+    Target graph.Node `json:"target"`
+    Attributes map[string]interface{}
+}
+
+func (e CEdge) marshalJSON() ([]byte, error) {
+    log.Println("marshal cedges")
+    source := *(e.Source.(*CNode))
+    target := *(e.Target.(*CNode))
+    id := fmt.Sprintf("%s_%s", source.Name, target.Name)
+    return json.Marshal(struct{
+        Id string
+        From CNode
+        To CNode
+        Attributes map[string]interface{}
+    }{
+        id,
+        source,
+        target,
+        e.Attributes,
+    })
 }
 
 func extract_contribution_interval(weeks *[]Week) (int, int) {
@@ -274,6 +321,7 @@ func fetch_contributors(g *CGraph, repo graph.Node) {
 }
 
 func main() {
+    tmpl := template.Must(template.ParseFiles("templates/layout.html"))
     g := NewCGraph()
     log.Println("Listing for request at 8001")
     for _, repo :=  range repos{
@@ -282,16 +330,17 @@ func main() {
     }
     //log.Println(fmt.Sprintf("%s", p_edges_user_repo))
     helloHandler := func(w http.ResponseWriter, req *http.Request) {
-        dot_graph, err := dot.Marshal(g, "blub", "prefix", "   ")
-        if err != nil {
-            log.Fatal(err)
-        }
-        graph_json, err := json.Marshal(g)
-        if err != nil {
-            log.Fatal(err)
-        }
-        io.WriteString(w, fmt.Sprintf("Blockkraken! %s\n %s", dot_graph, graph_json))
+        data := map[string]interface{}{"PageTitle": "Blockkraken!!!"}
+        tmpl.Execute(w, data)
     }
     http.HandleFunc("/blockkraken", helloHandler)
+    http.HandleFunc("/graph", func(w http.ResponseWriter, req *http.Request) {
+        gr, err := json.Marshal(*g) 
+        if err != nil {
+            log.Fatal(err) 
+        }
+        w.Header().Set("Content-Type", "application/json")
+        w.Write(gr)
+    })
     log.Fatal(http.ListenAndServe(":8001", nil))
 }
