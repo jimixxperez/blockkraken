@@ -30,42 +30,40 @@ type Contributor struct {
 
 type CNode struct {
     Id int64 `json:"id"`
+    Name string
+    Type string `json:"type"`
+    Attributes map[string]interface{}
 }
 
-func (n CNode) ID() int64 {
+func (n *CNode) ID() int64 {
    return n.Id
 }
 
-type Repo struct {
-    CNode
-    Owner string `json:"owner"`
-    Name string `json:"name"`
+func (n *CNode) String() string {
+    return n.Name
 }
 
-func (r *Repo) String() string {
-    return fmt.Sprintf("%s/%s", r.Owner, r.Name)
-}
-
-type User struct {
-    CNode
-    Login string `json:"login"`
-    Url string `json:"url"`
-}
-
-func NewUser(login string, url string) *User {
+func NewUser(login string, url string) graph.Node {
     sum := md5.Sum([]byte(login))
     num, _ := binary.Varint(sum[:])
-    return &User{
-        CNode{num},
-        login,
-        url,
+    attrs := make(map[string]interface{})
+    attrs["login"] = login
+    attrs["url"] = url
+    return &CNode{
+        Id: num,
+        Name: login,
+        Type: "User",
+        Attributes: attrs,
     }
 }
 
-func NewRepo(owner string, name string) *Repo {
-    repo := new(Repo)
-    repo.Owner = owner
-    repo.Name = name
+func NewRepo(owner string, name string) graph.Node {
+    repo := new(CNode)
+    repo.Type = "Repo"
+    attrs := make(map[string]interface{})
+    attrs["owner"] = owner
+    attrs["name"] = name
+    repo.Name = fmt.Sprintf("%s/%s", owner, name) 
     sum := md5.Sum([]byte(repo.String()))
     num, _ := binary.Varint(sum[:])
     repo.Id = num
@@ -74,25 +72,15 @@ func NewRepo(owner string, name string) *Repo {
 
 
 func NewContribution(from_node graph.Node, to_node graph.Node , total int, first int, last int) graph.Edge {
-    return Contribution{
+    attrs := make(map[string]interface{})
+    attrs["total"] = total
+    attrs["first"] = first
+    attrs["last"] = last
+    return CEdge{
         from_node,
         to_node,
-        total,
-        first,
-        last,
+        attrs,
     }
-}
-
-func (u *User) ID() int64 {
-    return u.Id
-}
-
-func (r *Repo) ID() int64 {
-    return r.Id
-}
-
-func (u *User) String() string {
-    return fmt.Sprintf("%s", u.Login)
 }
 
 type CNodes struct{
@@ -107,15 +95,15 @@ type CGraph struct {
     CEdges map[int64][]graph.Edge `json:"edges"`
 }
 
-func (c Contribution) From() graph.Node {
+func (c CEdge) From() graph.Node {
     return c.from
 }
 
-func (c Contribution) To() graph.Node {
+func (c CEdge) To() graph.Node {
     return c.to
 }
 
-func (c Contribution) ReversedEdge() graph.Edge {
+func (c CEdge) ReversedEdge() graph.Edge {
     c.to = c.from
     c.from = c.to
     return c
@@ -215,10 +203,10 @@ func (g *CGraph) HasEdgeBetween(xid, yid int64) bool {
 
 
 //var repos = new([]Repo)
-var repos = []Repo{
-    *NewRepo("ethereum", "go-ethereum"),
-    *NewRepo("smartcontractkit", "chainlink"),
-    *NewRepo("blockchainsllc", "DAO"),
+var repos = []graph.Node{
+    NewRepo("ethereum", "go-ethereum"),
+    NewRepo("smartcontractkit", "chainlink"),
+    NewRepo("blockchainsllc", "DAO"),
     //*NewRepo("paritytech", "polkadot"),
 }
 //repos = append(repos, NewRepo("ethereum","go-ethereum"))
@@ -231,18 +219,11 @@ var repos = []Repo{
 //repos =    //Repo{"icon-project", "loopchain"},
 
 // ==== EDGES ====
-type Contribution struct {
+type CEdge struct {
     from graph.Node `json:"from"`
     to graph.Node `json:"to"`
     attributes map[string]interface{}
-    Total int `json:"total"`
-    First int `json:"first"`
-    Last int `json:"last"`
 }
-
-var edges_repo_user = make(map[string][]*User)
-var edges_user_repo = make(map[string][]*Repo)
-var edges_user_contribution = make(map[string][]*Contribution)
 
 func extract_contribution_interval(weeks *[]Week) (int, int) {
         var first, last int
@@ -261,7 +242,7 @@ func extract_contribution_interval(weeks *[]Week) (int, int) {
 }
 
 
-func fetch_contributors(g *CGraph, repo *Repo) {
+func fetch_contributors(g *CGraph, repo graph.Node) {
     url := fmt.Sprintf("https://api.github.com/repos/%s/stats/contributors", repo)
     log.Println(fmt.Sprintf("fetch url: %s", url))
     resp, err := http.Get(url)
@@ -296,17 +277,8 @@ func main() {
     g := NewCGraph()
     log.Println("Listing for request at 8001")
     for _, repo :=  range repos{
-        g.AddNode(&repo)
-        fetch_contributors(g, &repo)
-    }
-    for k, v := range edges_user_contribution {
-        if len(v) >= 2 {
-            p, err := json.MarshalIndent(v, "", " ")
-            if err != nil {
-                log.Fatal(err)
-            }
-            log.Println(fmt.Sprintf("%s : %s", k, p))
-       }
+        g.AddNode(repo)
+        fetch_contributors(g, repo)
     }
     //log.Println(fmt.Sprintf("%s", p_edges_user_repo))
     helloHandler := func(w http.ResponseWriter, req *http.Request) {
