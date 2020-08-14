@@ -29,17 +29,17 @@ type Contributor struct {
 }
 
 type CNode struct {
-    Id int64
+    Id int64 `json:"id"`
 }
 
 func (n CNode) ID() int64 {
-   return n.Id 
+   return n.Id
 }
 
 type Repo struct {
     CNode
-    Owner string
-    Name string
+    Owner string `json:"owner"`
+    Name string `json:"name"`
 }
 
 func (r *Repo) String() string {
@@ -48,8 +48,8 @@ func (r *Repo) String() string {
 
 type User struct {
     CNode
-    Login string
-    Url string
+    Login string `json:"login"`
+    Url string `json:"url"`
 }
 
 func NewUser(login string, url string) *User {
@@ -103,8 +103,8 @@ type CNodes struct{
 
 // ==== NEW GRAPH ==== 
 type CGraph struct {
-    CNodes map[int64]graph.Node
-    CEdges map[int64][]graph.Edge
+    CNodes map[int64]graph.Node `json:"nodes"`
+    CEdges map[int64][]graph.Edge `json:"edges"`
 }
 
 func (c Contribution) From() graph.Node {
@@ -219,7 +219,7 @@ var repos = []Repo{
     *NewRepo("ethereum", "go-ethereum"),
     *NewRepo("smartcontractkit", "chainlink"),
     *NewRepo("blockchainsllc", "DAO"),
-    *NewRepo("paritytech", "polkadot"),
+    //*NewRepo("paritytech", "polkadot"),
 }
 //repos = append(repos, NewRepo("ethereum","go-ethereum"))
 //repos = append(repos, NewRepo("smartcontractkit", "chainlink"))
@@ -232,11 +232,12 @@ var repos = []Repo{
 
 // ==== EDGES ====
 type Contribution struct {
-    from graph.Node
-    to graph.Node
-    Total int
-    First int
-    Last int
+    from graph.Node `json:"from"`
+    to graph.Node `json:"to"`
+    attributes map[string]interface{}
+    Total int `json:"total"`
+    First int `json:"first"`
+    Last int `json:"last"`
 }
 
 var edges_repo_user = make(map[string][]*User)
@@ -311,9 +312,13 @@ func main() {
     helloHandler := func(w http.ResponseWriter, req *http.Request) {
         dot_graph, err := dot.Marshal(g, "blub", "prefix", "   ")
         if err != nil {
-            log.Fatal(err) 
+            log.Fatal(err)
         }
-        io.WriteString(w, fmt.Sprintf("Blockkraken! %s\n", dot_graph))
+        graph_json, err := json.Marshal(g)
+        if err != nil {
+            log.Fatal(err)
+        }
+        io.WriteString(w, fmt.Sprintf("Blockkraken! %s\n %s", dot_graph, graph_json))
     }
     http.HandleFunc("/blockkraken", helloHandler)
     log.Fatal(http.ListenAndServe(":8001", nil))
