@@ -12,7 +12,7 @@ import (
 //    "github.com/google/jsonapi"
     _ "crypto/md5"
     "gonum.org/v1/gonum/graph"
-    "github.com/jimixxperez/blockkraken/cgraph"
+    cgraph "github.com/jimixxperez/blockkraken/internal"
     _ "gonum.org/v1/gonum/graph/encoding/dot"
 )
 
